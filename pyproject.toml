@@ -1,0 +1,19 @@
+[project]
+name = "real-estate-scraper"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "beautifulsoup4>=4.14.3",
+    "cloudscraper>=1.2.71",
+    "dotenv>=0.9.9",
+    "playwright>=1.60.0",
+    "playwright-stealth>=2.0.3",
+    "requests>=2.34.2",
+]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.2.0",
+]
