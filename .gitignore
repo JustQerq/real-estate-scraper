@@ -13,7 +13,10 @@ wheels/
 .env
 session-profile/
 test-data.json
+data.json
+*.db
 
 # Debug and testing
 *.ipynb
 *.html
+logs/
