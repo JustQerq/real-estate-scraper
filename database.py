@@ -1,6 +1,9 @@
 import sqlite3
 import json
+import logging
 
+
+logger = logging.getLogger(__name__)
 
 def init_database():
     """
@@ -11,6 +14,7 @@ def init_database():
         cur.execute("""
             CREATE TABLE IF NOT EXISTS rent_raw (
                 id INTEGER PRIMARY KEY,
+                publish_date TEXT,
                 title TEXT,
                 href TEXT,
                 href_visited INTEGER,
@@ -64,6 +68,9 @@ def save_rent_items(items: list[dict]):
                 other = ", ".join(other)
 
             href_visited = item.get("href_visited", False)
+            if isinstance(href_visited, bool):
+                href_visited = int(href_visited)
+            
             is_furnished = item.get("is_furnished")
             if isinstance(is_furnished, bool):
                 is_furnished = int(is_furnished)
@@ -72,28 +79,32 @@ def save_rent_items(items: list[dict]):
             if isinstance(price, str):
                 try:
                     price = float(price)
-                except:
+                except Exception as e:
+                    logger.error(f"Could not convert price, error {e}")
                     price = None
             
             area = item.get("area")
             if isinstance(area, str):
                 try:
                     area = float(area)
-                except:
+                except Exception as e:
+                    logger.error(f"Could not convert area, error {e}")
                     area = None
             
             rooms = item.get("rooms")
             if isinstance(rooms, str):
                 try:
                     rooms = float(rooms)
-                except:
+                except Exception as e:
+                    logger.error(f"Could not convert rooms, error {e}")
                     rooms = None
 
             rows.append((
-                int(item["data-id"]),
+                item["data-id"],
+                item.get("publish_date"),
                 item.get("title"),
                 item.get("href"),
-                int(href_visited),
+                href_visited,
                 price,
                 item.get("city"),
                 item.get("district"),
@@ -101,8 +112,8 @@ def save_rent_items(items: list[dict]):
                 item.get("street"),
                 item.get("floor"),
                 item.get("max_floors"),
-                item.get("area"),
-                item.get("rooms"),
+                area,
+                rooms,
                 item.get("description"),
                 item.get("advertiser"),
                 item.get("construction_type"),
@@ -115,13 +126,14 @@ def save_rent_items(items: list[dict]):
 
         cur.executemany("""
             INSERT INTO rent_raw (
-                id, title, href, href_visited, price,
+                id, publish_date, title, href, href_visited, price,
                 city, district, microdistrict, street,
                 floor, max_floors, area, rooms, description,
                 advertiser, construction_type, is_furnished,
                 heating, payment_type, extra_info, other
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (id)
             DO NOTHING;
         """, rows)
+        logger.info(f"Inserted {cur.rowcount} out of {len(rows)}")
         con.commit()
