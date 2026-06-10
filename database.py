@@ -1,6 +1,8 @@
+from pathlib import Path
 import sqlite3
 import json
 import logging
+from typing import Any
 
 
 logger = logging.getLogger(__name__)
@@ -9,7 +11,11 @@ def init_database():
     """
     Initializes the database and creates tables if not present
     """
-    with sqlite3.connect("data.db") as con:
+    db_dir = Path("data")
+    db_dir.mkdir(exist_ok=True)
+    db_file = db_dir / "data.db"
+
+    with sqlite3.connect(db_file) as con:
         cur = con.cursor()
         cur.execute("""
             CREATE TABLE IF NOT EXISTS rent_raw (
@@ -46,7 +52,7 @@ def get_rent_ids():
     Returns:
         set[int]: set of unique ad ids
     """
-    with sqlite3.connect("data.db") as con:
+    with sqlite3.connect("data/data.db") as con:
         con.row_factory = sqlite3.Row
         cur = con.cursor()
         cur.execute("SELECT id FROM rent_raw")
@@ -55,7 +61,7 @@ def get_rent_ids():
 
 
 def save_rent_items(items: list[dict]):
-    with sqlite3.connect("data.db") as con:
+    with sqlite3.connect("data/data.db") as con:
         cur = con.cursor()
         rows = []
         for item in items:
@@ -135,5 +141,23 @@ def save_rent_items(items: list[dict]):
             ON CONFLICT (id)
             DO NOTHING;
         """, rows)
-        logger.info(f"Inserted {cur.rowcount} out of {len(rows)}")
+        logger.info(f"Inserted {cur.rowcount} out of {len(rows)} rows")
         con.commit()
+
+
+def load_rent_items(page_data=True):
+    with sqlite3.connect("data/data.db") as con:
+        con.row_factory = sqlite3.Row
+        cur = con.cursor()
+        if page_data:
+            cur.execute("""
+                SELECT
+                    id, href, href_visited, title, publish_date, 
+                    title, price, city, district, microdistrict, 
+                    street, floor, max_floors, area, rooms, description
+                FROM rent_raw WHERE href_visited = 0;
+            """)
+        else:
+            cur.execute("SELECT * FROM rent_raw")
+        rows = cur.fetchall()
+        return [dict[str, Any](row) for row in rows]
