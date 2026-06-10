@@ -6,7 +6,7 @@ from datetime import datetime, date
 from pathlib import Path
 
 from database import init_database, get_rent_ids, save_rent_items
-from scraper import scrape_pages, scrape_test
+from scraper import scrape_pages
 
 
 def setup_logging() -> Path:
@@ -46,7 +46,16 @@ async def main(**kwargs):
         except:
             raise ValueError("Could not convert 'pages' argument to an integer")
     else:
-        pages = 2
+        pages = None
+    
+    starting_page = kwargs.get("starting-page")
+    if starting_page:
+        try:
+            starting_page = int(starting_page)
+        except:
+            raise ValueError("Could not convert 'starting-page' argument to an integer")
+    else:
+        starting_page = 1
     
 
     stop_on_seen = kwargs.get("stop-on-seen")
@@ -61,29 +70,30 @@ async def main(**kwargs):
     logger.info(f"Running with kwargs: n_pages={pages}, stop_date={stop_date}, stop_on_seen={stop_on_seen}")
     
     try:
-        scraped_items = asyncio.run(scrape_pages(
+        async for scraped_items in scrape_pages(
             n_pages=pages, 
+            starting_page=starting_page,
             stop_on_seen=stop_on_seen,
             stop_date=stop_date,
             existing_ids=get_rent_ids()
-        ))
+        ):
+            if scraped_items:
+                if len(scraped_items) > 0:
+                    try:
+                        save_rent_items(scraped_items)
+                        logger.info("Successfully saved scraped data into SQLite DB.")
+                    except Exception as e:
+                        logger.error(f"SQLite save failed, resorting to a JSON file. Error: {e}")
+                        with open(f"data/data_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.json", "a", encoding="utf8") as f:
+                            json.dump(scraped_items, f, indent=4, ensure_ascii=False)
+                        logger.info("Saved scraped data into 'data.json' file.")
+                else:
+                    logger.info("No new items to save")
+            else:
+                logger.error("Scraper returned no items!")
+    
     except Exception as e:
         logger.error(f"Error occurred while scraping: {e}")
-    
-    if scraped_items:
-        if len(scraped_items) > 0:
-            try:
-                save_rent_items(scraped_items)
-                logger.info("Successfully saved scraped data into SQLite DB.")
-            except Exception as e:
-                logger.error(f"SQLite save failed, resorting to a JSON file. Error: {e}")
-                with open(f"data_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.json", "w", encoding="utf8") as f:
-                    json.dump(scraped_items, f, indent=4, ensure_ascii=False)
-                logger.info("Saved scraped data into 'data.json' file.")
-        else:
-            logger.info("No new items to save")
-    else:
-        logger.info("Error occurred during scraping, nothing to save")
 
 
 if __name__ == "__main__":
