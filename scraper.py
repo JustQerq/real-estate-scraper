@@ -129,7 +129,7 @@ def process_page(
             if len(features) > 0:
                 area = features[0].find(string=True)
                 if area:
-                    item_processed['area'] = unicodedata.normalize('NFKC', area).strip().split()[0]
+                    item_processed['area'] = unicodedata.normalize('NFKC', area).strip().split()[0].replace(",", ".")
                 if len(features) > 1:
                     rooms = features[1].find(string=True)
                     if rooms:
@@ -265,18 +265,8 @@ async def warmup_run():
             await context.close()
 
 
-async def scrape_test():
-    items = []
-    for i in range(4):
-        item = []
-        for j in range(3):
-            item.append(str(j*(i+1)))
-        yield item
-        await asyncio.sleep(2)
-
-
 async def scrape_pages(
-    n_pages: int = 1,
+    n_pages: int | None = None,
     starting_page: int = 1,
     stop_on_seen: bool = True,
     stop_date: date | None = None,
@@ -286,8 +276,13 @@ async def scrape_pages(
         raise Exception("BASE_URL variable not found in environment")
     if not RENT_PATH:
         raise Exception("RENT_PATH variable not found in environment")
-
     rent_url = urljoin(BASE_URL, RENT_PATH)
+
+    if not (n_pages or stop_date):
+        if stop_on_seen:
+            logger.warning("Both 'n_pages' and 'stop_date' are not set, 'stop_on_seen' alone does not guarantee stop condition!")
+        else:
+            raise Exception("'n_pages', 'stop_date' and 'stop_on_seen' are not set, no stop condition defined!")
 
     if not existing_ids:
         existing_ids = set[int]()
@@ -303,7 +298,7 @@ async def scrape_pages(
         try:
             await warmup_navigation(page, BASE_URL)
 
-            while pages_counter < n_pages:
+            while True:
                 page_url = rent_url if page_number == 1 else urljoin(rent_url, f"?page={page_number}")
                 await goto_with_backoff(page, page_url)
                 await page.wait_for_load_state("domcontentloaded")
@@ -330,15 +325,22 @@ async def scrape_pages(
                 page_number += 1
                 pages_counter += 1
                 logger.info(f"Processed {pages_counter} pages.")
-                if pages_counter < n_pages:
-                    if pages_counter % 25 == 0:
-                        sleep_time = random.uniform(120, 300)
-                        logger.info(f"Sleeping for {sleep_time} seconds between page clusters")
-                        await asyncio.sleep(sleep_time)
-                    else:
-                        sleep_time = random.uniform(3, 8)
-                        logger.info(f"Sleeping for {sleep_time} seconds between pages")
-                        await asyncio.sleep(sleep_time)
+
+                if len(items_processed) > 200:
+                    yield items_processed
+                    items_processed = []
+                
+                if n_pages and pages_counter >= n_pages:
+                    break
+                
+                if pages_counter % 20 == 0:
+                    sleep_time = random.uniform(120, 300)
+                    logger.info(f"Sleeping for {sleep_time} seconds between page clusters")
+                    await asyncio.sleep(sleep_time)
+                else:
+                    sleep_time = random.uniform(5, 12)
+                    logger.info(f"Sleeping for {sleep_time} seconds between pages")
+                    await asyncio.sleep(sleep_time)
 
             logger.info("Successfully finished scraping")
 
@@ -352,4 +354,4 @@ async def scrape_pages(
             await save_session_state(context)
             await context.close()
 
-    return items_processed
+    yield items_processed
