@@ -43,23 +43,32 @@ def geocode_place(query: str):
 
 def geocode_dataframe(
     df: pd.DataFrame,
-    cols: list
+    cols: str | list[str]
 ):
     df_copy = df.copy()
-    df_copy["location"] = df[cols].dropna().agg(', '.join, axis=1)
-    unique_places = df_copy["location"].unique()
-
+    
+    if isinstance(cols, str):
+        cols = [cols]
+    
+    location_col = "location"
+    
+    if len(cols) == 1:
+        location_col = cols[0]
+    else:
+        df_copy[location_col] = df[cols].agg(', '.join, axis=1)
+    
+    unique_places = df_copy[location_col].dropna().unique()
     for place in unique_places:
         cache[place] = geocode_place(place)
         time.sleep(0.05)
     
     save_cache()
     
-    coords_df = pd.DataFrame.from_dict(cache, orient="index").rename_axis("location").reset_index()
-    return df_copy.merge(coords_df, on="location", how="left")
+    coords_df = pd.DataFrame.from_dict(cache, orient="index").rename_axis(location_col).reset_index()
+    return df_copy.join(coords_df.set_index("location"), on="location", how="left")
 
 
-def parse_floor(floor: str) -> int | None:
+def parse_floor(floor: str) -> float | None:
     specials_map = {
         'PR': 0,       # ground floor
         'VPR': 0.5,    # high ground floor 
@@ -93,9 +102,20 @@ def parse_floor(floor: str) -> int | None:
             
             converted = total
         except:
-            converted = None
+            converted = float("nan")
     
     return converted
+
+
+def clean_rent(data: list[dict]):
+    raw_df = pd.DataFrame(data)
+    raw_df.drop(["href", "href_visited", "title", "street", "description", "max_floors"], axis=1, inplace=True)
+    raw_df.set_index("id", drop=True, inplace=True)
+    clean_df = geocode_dataframe(raw_df, cols=["city", "district", "microdistrict"])
+    clean_df.dropna(inplace=True)
+    clean_df.drop(["city", "district", "microdistrict", "location"], axis=1, inplace=True)
+    clean_df['floor'] = clean_df['floor'].apply(parse_floor)
+    clean_df.to_csv("data/data_clean.csv")
 
 
 if __name__ == "__main__":
