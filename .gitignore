@@ -15,8 +15,10 @@ session-profile/
 test-data.json
 data.json
 *.db
+*.csv
 
 # Debug and testing
-*.ipynb
+database-test.ipynb
+scraper_test.ipynb
 *.html
 logs/
